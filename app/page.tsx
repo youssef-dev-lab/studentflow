@@ -2,15 +2,28 @@
 
 import { useState } from "react";
 
-export default function Home() {
-  const [courses, setCourses] = useState<string[]>([]);
-  const [courseName, setCourseName] = useState("");
-  function addCourse() {
-  if (courseName.trim() === "") return;
+interface Course {
+  name: string;
+  code: string;
+}
 
-  setCourses([...courses, courseName]);
+export default function Home() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseName, setCourseName] = useState("");
+  const [courseCode, setCourseCode] = useState("");
+  function addCourse() {
+  if (courseName.trim() === "" || courseCode.trim() === "") return;
+
+  const newCourse: Course = {
+    name: courseName,
+    code: courseCode,
+  };
+
+  setCourses([...courses, newCourse]);
+
   setCourseName("");
-  }
+  setCourseCode("");
+}
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-10">
@@ -29,6 +42,13 @@ export default function Home() {
             placeholder="Course name"
             value={courseName}
             onChange={(e) => setCourseName(e.target.value)}
+            className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-white outline-none"
+          />
+          <input
+            type="text"
+            placeholder="Course code"
+            value={courseCode}
+            onChange={(e) => setCourseCode(e.target.value)}
             className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-white outline-none"
           />
 
@@ -62,7 +82,8 @@ export default function Home() {
                 key={index}
                 className="rounded-lg border border-gray-800 bg-gray-900 p-4"
               >
-                {course}
+                <p className="font-semibold">{course.name}</p>
+                <p className="mt-1 text-sm text-gray-400">{course.code}</p>
               </div>
             ))}
           </div>

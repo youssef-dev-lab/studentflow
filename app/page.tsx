@@ -23,7 +23,13 @@ export default function Home() {
 
   setCourseName("");
   setCourseCode("");
-}
+  }
+  function deleteCourse(indexToDelete: number) {
+  setCourses(
+    courses.filter((_, index) => index !== indexToDelete)
+  );
+  }
+
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-10">
@@ -80,10 +86,19 @@ export default function Home() {
             {courses.map((course, index) => (
               <div
                 key={index}
-                className="rounded-lg border border-gray-800 bg-gray-900 p-4"
+                className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 p-4"
               >
-                <p className="font-semibold">{course.name}</p>
-                <p className="mt-1 text-sm text-gray-400">{course.code}</p>
+                <div>
+                  <p className="font-semibold">{course.name}</p>
+                  <p className="mt-1 text-sm text-gray-400">{course.code}</p>
+                </div>
+
+                <button
+                  onClick={() => deleteCourse(index)}
+                  className="rounded-lg border border-red-900 px-3 py-2 text-sm text-red-400 hover:bg-red-950"
+                >
+                  Delete
+                </button>
               </div>
             ))}
           </div>

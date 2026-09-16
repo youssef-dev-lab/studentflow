@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 interface Course {
+  id: string;
   name: string;
   code: string;
 }
@@ -15,6 +16,7 @@ export default function Home() {
   if (courseName.trim() === "" || courseCode.trim() === "") return;
 
   const newCourse: Course = {
+    id: crypto.randomUUID(),
     name: courseName,
     code: courseCode,
   };
@@ -24,11 +26,9 @@ export default function Home() {
   setCourseName("");
   setCourseCode("");
   }
-  function deleteCourse(indexToDelete: number) {
-  setCourses(
-    courses.filter((_, index) => index !== indexToDelete)
-  );
-  }
+  function deleteCourse(id: string) {
+  setCourses(courses.filter((course) => course.id !== id));
+}
 
 
   return (
@@ -83,9 +83,9 @@ export default function Home() {
           <h2 className="text-2xl font-semibold">My Courses</h2>
 
           <div className="mt-4 space-y-3">
-            {courses.map((course, index) => (
+            {courses.map((course) => (
               <div
-                key={index}
+                key={course.id}
                 className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 p-4"
               >
                 <div>
@@ -94,7 +94,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => deleteCourse(index)}
+                  onClick={() => deleteCourse(course.id)}
                   className="rounded-lg border border-red-900 px-3 py-2 text-sm text-red-400 hover:bg-red-950"
                 >
                   Delete

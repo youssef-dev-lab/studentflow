@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f9">
+  <title>StudentFlow · Your study space</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">s<span>f</span></span>StudentFlow<span class="brand-dot">.</span></a>
+  <p class="eyebrow nav-caption">YOUR WORKSPACE</p>
+  <nav aria-label="Main navigation">
+    {% for key, icon, label in [('all', '◈', 'Overview'), ('today', '◷', 'Today'), ('week', '▦', 'This week'), ('completed', '✓', 'Completed')] %}
+    <a class="nav-link {{ 'selected' if view == key }}" href="{{ url_for('home', view=key) }}" {% if view == key %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}{% if key == 'today' and urgent %}<b>{{ urgent|length }}</b>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  <div class="sidebar-courses"><p class="eyebrow">MY COURSES <a href="#courses" aria-label="Manage courses">+</a></p>
+    {% for course in courses %}<a class="course-link" href="{{ url_for('home', course=course.id) }}#plan"><i class="color-dot color-{{ loop.index0 % 4 }}"></i><span>{{ course.code }}</span><small>{{ course.pending }}</small></a>{% else %}<p class="subtle small">Your semester starts with one course.</p>{% endfor %}
+  </div>
+  <div class="sidebar-note"><span>One thing at a time.</span><p>A little progress today makes tomorrow lighter.</p><div class="tiny-line"></div></div>
+  <div class="profile"><span class="avatar">YOU</span><div><strong>My study space</strong><small>Make room for what matters</small></div></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><span>Workspace <span class="slash">/</span> <strong>{{ 'Overview' if view == 'all' else 'Today' if view == 'today' else 'This week' if view == 'week' else 'Completed' }}</strong></span><span class="saved"><i></i> Saved on this device</span></header>
+  <main id="main">
+    <div class="page-heading"><div><p class="eyebrow">{{ today.strftime('%A, %B %d').upper() }}</p><h1>A little structure.<br class="mobile-break"> A lot less stress<span>.</span></h1><p class="subtle">Your courses, deadlines, and next steps. All in one place.</p></div><a class="button primary" href="#capture">+ Add study item</a></div>
+    {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+    <section class="stats" aria-label="Your semester at a glance">
+      <div class="stat"><span class="stat-icon purple">◷</span><div><p>Needs attention</p><strong>{{ urgent|length }}</strong><small>{{ active|selectattr('days', 'lt', 0)|list|length }} overdue · {{ active|selectattr('days', 'equalto', 0)|list|length }} due today</small></div></div>
+      <div class="stat"><span class="stat-icon blue">▦</span><div><p>Next 7 days</p><strong>{{ upcoming|length }}</strong><small>Upcoming deadlines</small></div></div>
+      <div class="stat"><span class="stat-icon green">✓</span><div><p>Completed</p><strong>{{ completed|length }}</strong><small>{{ progress }}% of your study plan</small></div></div>
+      <div class="stat"><span class="stat-icon peach">▤</span><div><p>My courses</p><strong class="count">{{ courses|length }}</strong><small>Your semester, organized</small></div></div>
+    </section>
+    <div class="dashboard-grid">
+      <div class="main-column">
+        <section class="focus-card" aria-labelledby="focus-title">
+          <div class="focus-top"><span class="eyebrow">✦ YOUR NEXT SMALL WIN</span><span class="focus-tag">{{ next_task.minutes ~ ' min estimated' if next_task else 'A fresh start' }}</span></div>
+          {% if next_task %}<h2 id="focus-title">{{ next_task.title }}</h2><p>{{ next_task.course_code }} <span>·</span> {{ next_task.due_label }} <span>·</span> {{ next_task.kind|title }}</p><div class="focus-bottom"><span>Start here. You only need to take the next step.</span><a class="button dark" href="{{ url_for('edit_task', task_id=next_task.id) }}#capture">View item <span aria-hidden="true">↗</span></a></div>
+          {% else %}<h2 id="focus-title">{{ 'A clear plan. A clearer head.' if not completed else 'You’re all caught up.' }}</h2><p>{{ 'Add your first deadline and we’ll help you find your next step.' if not completed else 'Everything on your list is done. Enjoy a little breathing room.' }}</p><div class="focus-bottom"><span>Small steps add up to a good semester.</span><a class="button dark" href="{{ '#capture' if courses else '#courses' }}">{{ 'Plan your next step' if courses else 'Add your first course' }} <span aria-hidden="true">↗</span></a></div>{% endif %}
+        </section>
+        <section class="panel week-panel" aria-labelledby="week-title"><div class="section-heading"><div><h2 id="week-title">A look ahead</h2><p class="subtle small">Your deadlines over the next seven days</p></div><span class="small subtle">{{ today.strftime('%b %d') }} → {{ week[-1].number }}</span></div>
+          <div class="week-strip">{% for day in week %}<div class="day {{ 'current' if loop.first }}"><span>{{ day.label }}</span><strong>{{ day.number }}</strong><div class="day-dots" aria-label="{{ day.tasks|length }} pending items">{% for task in day.tasks[:3] %}<i title="{{ task.title }}" class="{{ task.kind }}"></i>{% endfor %}{% if day.tasks|length > 3 %}<small>+{{ day.tasks|length - 3 }}</small>{% endif %}</div></div>{% endfor %}</div><div class="legend"><span><i class="assignment"></i>Assignment</span><span><i class="exam"></i>Exam</span><span><i class="study"></i>Study session</span></div>
+        </section>
+        <section id="plan" class="panel plan-panel" aria-labelledby="plan-title">
+          <div class="section-heading"><div><h2 id="plan-title">{{ heading }} <span class="number-badge">{{ tasks|length }}</span></h2><p class="subtle small">{{ 'Look at everything you’ve moved forward.' if view == 'completed' else 'Nearest deadline first. One step at a time.' }}</p></div></div>
+          <div class="plan-toolbar"><div class="tabs"><a class="{{ 'active' if view == 'all' }}" href="{{ url_for('home', course=course_filter) }}#plan">To do</a><a class="{{ 'active' if view == 'today' }}" href="{{ url_for('home', view='today', course=course_filter) }}#plan">Today</a><a class="{{ 'active' if view == 'completed' }}" href="{{ url_for('home', view='completed', course=course_filter) }}#plan">Done</a></div><form method="get" action="{{ url_for('home') }}#plan" class="filter"><input type="hidden" name="view" value="{{ view }}"><label class="sr-only" for="course-filter">Filter by course</label><select id="course-filter" name="course"><option value="">All courses</option>{% for course in courses %}<option value="{{ course.id }}" {{ 'selected' if course_filter == course.id }}>{{ course.code }}</option>{% endfor %}</select><button class="filter-button" type="submit">Filter</button></form></div>
+          <div class="task-list">{% for task in tasks %}<article class="task-row {{ 'done' if task.completed }}">
+            <form action="{{ url_for('toggle_task', task_id=task.id) }}" method="post"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="course" value="{{ course_filter }}"><button class="check-button" aria-label="{{ 'Reopen' if task.completed else 'Complete' }} {{ task.title }}" title="{{ 'Reopen item' if task.completed else 'Mark complete' }}">{{ '✓' if task.completed else '' }}</button></form>
+            <div class="task-body"><a class="task-title" href="{{ url_for('edit_task', task_id=task.id) }}#capture">{{ task.title }}</a><div class="task-meta"><span class="course-chip">{{ task.course_code }}</span><span>{{ task.kind|title }}</span><span>◷ {{ task.minutes }} min</span>{% if task.priority == 'high' %}<span class="priority">High priority</span>{% endif %}</div>{% if task.notes %}<details class="task-notes"><summary>Notes</summary><p>{{ task.notes }}</p></details>{% endif %}</div>
+            <div class="task-end"><span class="due {{ 'overdue' if task.days < 0 and not task.completed else 'due-today' if task.days == 0 and not task.completed }}">{{ 'Completed' if task.completed else task.due_label }}</span><a class="edit-link" href="{{ url_for('edit_task', task_id=task.id) }}#capture">Edit</a></div>
+          </article>{% else %}<div class="empty-state"><span class="empty-icon">{{ '✓' if view == 'completed' else '✧' }}</span><h3>{{ 'Your wins will live here' if view == 'completed' else 'Nothing on this list. Room to breathe.' }}</h3><p>{{ 'Complete a study item to see your progress here.' if view == 'completed' else 'Add an assignment, exam, or study session to start planning.' }}</p>{% if view != 'completed' %}<a href="#capture">Plan something small <span aria-hidden="true">→</span></a>{% endif %}</div>{% endfor %}</div>
+        </section>
+        <section class="panel courses-panel" id="courses" aria-labelledby="courses-title"><div class="section-heading"><div><h2 id="courses-title">My courses</h2><p class="subtle small">A home for every part of your semester</p></div><span class="number-badge">{{ courses|length }}</span></div><div class="course-cards">{% for course in courses %}<article class="course-card"><span class="course-symbol color-{{ loop.index0 % 4 }}">{{ course.code[:2]|upper }}</span><div><h3>{{ course.name }}</h3><p>{{ course.code }} · {{ course.pending }} to do</p></div><details class="course-menu"><summary aria-label="Options for {{ course.name }}">···</summary><form action="{{ url_for('delete_course', course_id=course.id) }}" method="post">{% if course.total %}<p class="small subtle">Remove this course’s study items first.</p>{% else %}<button class="delete-link">Delete course</button>{% endif %}</form></details></article>{% else %}<p class="subtle small">No courses yet. Add your first course below.</p>{% endfor %}</div><form class="course-form" action="{{ url_for('add_course') }}" method="post"><div><label for="name">Course name</label><input id="name" name="name" placeholder="e.g. Introduction to Economics" maxlength="120" value="{{ form.get('name', '') }}" required></div><div><label for="code">Course code</label><input id="code" name="code" placeholder="ECON101" maxlength="24" value="{{ form.get('code', '') }}" required></div><button class="button secondary" type="submit">+ Add course</button></form></section>
+      </div>
+      <aside class="right-column">
+        <section class="panel capture-panel" id="capture" aria-labelledby="capture-title"><span class="eyebrow purple-text">MAKE SPACE IN YOUR HEAD</span><h2 id="capture-title">{{ 'Edit your study item' if editing else 'Get it off your mind.' }}</h2><p class="subtle small">{{ 'Adjust the plan. Keep moving forward.' if editing else 'Write it down now. Thank yourself later.' }}</p>
+          {% if courses %}
+          {% set values = form if form.get('title') is not none else editing if editing else {} %}
+          <form class="task-form" action="{{ url_for('edit_task', task_id=editing.id) if editing else url_for('add_task') }}" method="post">
+            <label for="title">What needs doing?</label><input id="title" name="title" placeholder="e.g. Finish chapter 3 exercises" maxlength="180" value="{{ values.get('title', '') }}" required>
+            <label for="course_id">Course</label><select id="course_id" name="course_id" required><option value="">Choose a course</option>{% for course in courses %}<option value="{{ course.id }}" {{ 'selected' if values.get('course_id', course_filter) == course.id }}>{{ course.code }} · {{ course.name }}</option>{% endfor %}</select>
+            <div class="form-pair"><div><label for="kind">Type</label><select id="kind" name="kind">{% for kind, label in [('assignment', 'Assignment'), ('exam', 'Exam'), ('study', 'Study session')] %}<option value="{{ kind }}" {{ 'selected' if values.get('kind') == kind }}>{{ label }}</option>{% endfor %}</select></div><div><label for="due_date">Due date</label><input type="date" id="due_date" name="due_date" value="{{ values.get('due_date', today.isoformat()) }}" required></div></div>
+            <div class="form-pair"><div><label for="priority">Priority</label><select id="priority" name="priority">{% for key in ['normal', 'high', 'low'] %}<option value="{{ key }}" {{ 'selected' if values.get('priority') == key }}>{{ key|title }}</option>{% endfor %}</select></div><div><label for="minutes">Estimate (minutes)</label><input type="number" id="minutes" name="minutes" min="5" max="1440" value="{{ values.get('minutes', 30) }}" required></div></div>
+            <label for="notes">Notes <span class="subtle">(optional)</span></label><textarea id="notes" name="notes" rows="3" maxlength="4000" placeholder="A chapter, a reminder, a place to start…">{{ values.get('notes', '') }}</textarea>
+            <button class="button primary full" type="submit">{{ 'Save changes' if editing else '+ Add to my plan' }}</button>{% if editing %}<a class="cancel" href="{{ url_for('home') }}#plan">Cancel editing</a>{% endif %}
+          </form>{% if editing %}<details class="remove-item"><summary>Remove this item</summary><p class="small subtle">This permanently removes the item and its notes.</p><form method="post" action="{{ url_for('delete_task', task_id=editing.id) }}"><button class="delete-link">Delete item permanently</button></form></details>{% endif %}
+          {% else %}<div class="setup-note"><span>01</span><h3>First, add a course.</h3><p>Then give your assignments and exams a place to land.</p><a class="button primary full" href="#courses">Add my first course →</a></div>{% endif %}
+        </section>
+        <section class="panel progress-panel"><div class="section-heading"><h2>Little by little</h2><span class="purple-text">✦</span></div><div class="progress-number">{{ progress }}<span>%</span></div><progress value="{{ progress }}" max="100" aria-label="Study plan completion">{{ progress }}%</progress><p class="small subtle">{{ completed|length }} of {{ completed|length + active|length }} study items completed.</p><p class="progress-caption">{{ 'Your next small win is waiting.' if active else 'Every finished item is a step forward.' }}</p></section>
+        <section class="time-note"><span class="time-icon">◷</span><div><h3>{{ remaining_minutes ~ ' min on your radar' if urgent else 'Give yourself some breathing room' }}</h3><p>{{ 'Estimated work for today and overdue items. Split it into a few manageable sessions.' if urgent else 'Leave space between tasks. A realistic plan is one you can actually follow.' }}</p></div></section>
+      </aside>
+    </div>
+    <footer>Made for a calmer semester. <span>One small win at a time.</span></footer>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% if focused_item %}
+<section id="focus-task" class="panel focus-mode" aria-labelledby="focus-task-title">
+  <p class="eyebrow purple-text">ONE THING AT A TIME</p>
+  <h2 id="focus-task-title">{{ focused_item.title }}</h2>
+  <p class="small subtle">{{ focused_item.course_name }} · {{ focused_item.kind_label }} · {{ focused_item.due_label }}</p>
+  <p>{% if focused_item.remaining_minutes %}Suggested focus: {{ [focused_item.remaining_minutes, 45]|min }} minutes. {% endif %}{{ 'Preparation is complete. Review and finish the original item when ready.' if focused_item.remaining_minutes == 0 else 'Choose a small part of this work and give it your attention.' }}</p>
+  {% if focused_item.notes %}<p class="focus-notes">{{ focused_item.notes }}</p>{% endif %}
+  <form action="{{ url_for('toggle_task', task_id=focused_item.id) }}" method="post" data-enhance>
+    <button class="button primary">{{ 'Reopen item' if focused_item.completed else 'Mark complete' }}</button>
+    <a class="button secondary" href="{{ url_for('edit_task', task_id=focused_item.id) }}#capture">Edit item</a>
+    <a class="button secondary" href="{{ url_for('home') }}">Back to plan</a>
+  </form>
+</section>
+{% endif %}

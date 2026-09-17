@@ -1,0 +1,26 @@
+<section class="panel courses-panel" id="courses" aria-labelledby="courses-title">
+  <div class="section-heading">
+    <div><h2 id="courses-title">My courses</h2><p class="subtle small">A home for every part of your semester</p></div>
+    <span class="number-badge">{{ courses|length }}</span>
+  </div>
+  <div class="course-cards">
+    {% for course in courses %}
+    <article class="course-card">
+      <span class="course-symbol" style="--course-color: {{ course.color }}">{{ course.code[:2]|upper }}</span>
+      <div><h3><a href="{{ url_for('course_detail', course_id=course.id) }}#course-detail">{{ course.name }}</a></h3><p>{{ course.code }} · {{ course.pending }} to do</p></div>
+      <a class="edit-link" href="{{ url_for('edit_course', course_id=course.id) }}#course-form">Edit</a>
+      <a class="delete-link" href="{{ url_for('delete_course', course_id=course.id) }}#confirmation">Delete</a>
+    </article>
+    {% else %}<p class="subtle small">No courses yet. Add your first course below.</p>{% endfor %}
+  </div>
+  {% set course_values = form if form.get('name') is not none else course_edit if course_edit else {} %}
+  <h3 id="course-form-title">{{ 'Edit course' if course_edit else 'Add a course' }}</h3>
+  <form id="course-form" class="course-form" data-enhance method="post" action="{{ url_for('edit_course', course_id=course_edit.id) if course_edit else url_for('add_course') }}" aria-labelledby="course-form-title">
+    <div><label for="name">Course name</label><input id="name" name="name" placeholder="e.g. Artificial Intelligence" maxlength="120" value="{{ course_values.get('name', '') }}" required></div>
+    <div><label for="code">Course code</label><input id="code" name="code" placeholder="CSC 3326" maxlength="24" value="{{ course_values.get('code', '') }}" required></div>
+    <div><label for="color">Course color</label><input id="color" name="color" type="color" value="{{ course_values.get('color', default_color) }}" required></div>
+    <div><label for="instructor">Instructor (optional)</label><input id="instructor" name="instructor" maxlength="120" value="{{ course_values.get('instructor', '') }}"></div>
+    <button class="button secondary" type="submit">{{ 'Save course' if course_edit else '+ Add course' }}</button>
+    {% if course_edit %}<a class="cancel" href="{{ url_for('course_detail', course_id=course_edit.id) }}#course-detail">Cancel editing</a>{% endif %}
+  </form>
+</section>

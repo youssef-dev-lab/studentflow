@@ -1,0 +1,57 @@
+<section id="plan" class="panel plan-panel" aria-labelledby="plan-title">
+  <div class="section-heading">
+    <div><h2 id="plan-title">{{ heading }} <span class="number-badge">{{ tasks|length }}</span></h2>
+      <p class="subtle small">{{ 'Look at everything you’ve moved forward.' if view == 'completed' else 'Overdue first, then priority and deadline.' if view == 'today' else 'Nearest deadline first. One step at a time.' }}</p>
+    </div>
+  </div>
+  <div class="plan-toolbar">
+    <div class="tabs">
+      {% for key, label in [('all', 'To do'), ('today', 'Today'), ('completed', 'Done')] %}
+      <a class="{{ 'active' if view == key }}" href="{{ url_for('home', view=key, course=course_filter, type=type_filter, priority=priority_filter) }}#plan">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <form method="get" action="{{ url_for('home') }}#plan" class="filter">
+      <input type="hidden" name="view" value="{{ view }}">
+      {% if date_filter %}<input type="hidden" name="date" value="{{ date_filter }}">{% endif %}
+      <label class="sr-only" for="course-filter">Filter by course</label>
+      <select id="course-filter" name="course"><option value="">All courses</option>{% for course in courses %}<option value="{{ course.id }}" {{ 'selected' if course_filter == course.id }}>{{ course.code }}</option>{% endfor %}</select>
+      <label class="sr-only" for="type-filter">Filter by type</label>
+      <select id="type-filter" name="type"><option value="">All types</option>{% for key, label in kinds.items() %}<option value="{{ key }}" {{ 'selected' if type_filter == key }}>{{ label }}</option>{% endfor %}</select>
+      <label class="sr-only" for="priority-filter">Filter by priority</label>
+      <select id="priority-filter" name="priority"><option value="">All priorities</option>{% for key in ['high', 'normal', 'low'] %}<option value="{{ key }}" {{ 'selected' if priority_filter == key }}>{{ key|title }}</option>{% endfor %}</select>
+      <button class="filter-button" type="submit">Filter</button>
+    </form>
+  </div>
+  {% if date_filter %}<p class="small selected-date">Showing {{ date_filter }}. <a href="{{ url_for('home', view='week', course=course_filter, type=type_filter, priority=priority_filter) }}#plan">Show the next seven days</a></p>{% endif %}
+  <div class="task-list">{% for task in tasks %}
+    {% if view == 'week' and not date_filter and loop.changed(task.due_date) %}<h3 class="day-heading">{{ task.due_label }}</h3>{% endif %}
+    <article class="task-row {{ 'done' if task.completed }}">
+      <form action="{{ url_for('toggle_task', task_id=task.id) }}" method="post" data-enhance>
+        {% for key, value in [('view', view), ('course', course_filter), ('type', type_filter), ('priority', priority_filter), ('date', date_filter)] %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+        <button class="check-button" aria-label="{{ 'Reopen' if task.completed else 'Complete' }} {{ task.title }}" title="{{ 'Reopen item' if task.completed else 'Mark complete' }}">{{ '✓' if task.completed else '' }}</button>
+      </form>
+      <div class="task-body">
+        <a class="task-title" href="{{ url_for('edit_task', task_id=task.id) }}#capture">{{ task.title }}</a>
+        <div class="task-meta">
+          <a class="course-chip" href="{{ url_for('course_detail', course_id=task.course_id) }}#course-detail" style="--course-color: {{ task.course_color }}" title="{{ task.course_name }}">{{ task.course_code }}</a>
+          <span>{{ task.kind_label }}</span><span>◷ {{ task.minutes }} min</span><span class="{{ 'priority' if task.priority == 'high' }}">{{ task.priority|title }} priority</span>
+        </div>
+        {% if task.has_plan %}<p class="small subtle">{{ task.studied_minutes }} / {{ task.minutes }} min of preparation complete</p>{% endif %}
+        {% if task.parent_id %}<a class="edit-link" href="{{ url_for('edit_task', task_id=task.parent_id) }}#capture">View original item</a>{% endif %}
+        {% if task.notes %}<details class="task-notes"><summary>Notes</summary><p>{{ task.notes }}</p></details>{% endif %}
+      </div>
+      <div class="task-end">
+        <span class="due {{ 'overdue' if task.days < 0 and not task.completed else 'due-today' if task.days == 0 and not task.completed }}">{{ 'Completed ' ~ task.completed_label if task.completed else task.due_label }}</span>
+        <a class="edit-link" href="{{ url_for('edit_task', task_id=task.id) }}#capture">Edit</a>
+        {% if not task.parent_id %}<a class="delete-link" href="{{ url_for('delete_task', task_id=task.id) }}#confirmation">Delete</a>{% endif %}
+      </div>
+    </article>
+    {% else %}
+    <div class="empty-state"><span class="empty-icon">{{ '✓' if view in ['today', 'completed'] else '✧' }}</span>
+      <h3>{{ 'Your wins will live here' if view == 'completed' else "Nothing urgent today. You’re caught up." if view == 'today' and not course_filter and not type_filter and not priority_filter else 'No items match this view.' }}</h3>
+      <p>{{ 'Complete a study item to see your progress here.' if view == 'completed' else 'Try another filter or add your next assignment, exam, or study session.' }}</p>
+      {% if view != 'completed' %}<a href="#capture">Plan something small →</a>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

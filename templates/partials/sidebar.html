@@ -1,0 +1,14 @@
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">s<span>f</span></span>StudentFlow<span class="brand-dot">.</span></a>
+  <p class="eyebrow nav-caption">YOUR WORKSPACE</p>
+  <nav aria-label="Main navigation">
+    {% for key, icon, label in [('all', '◈', 'Overview'), ('today', '◷', 'Today'), ('week', '▦', 'This week'), ('completed', '✓', 'Completed')] %}
+    <a class="nav-link {{ 'selected' if view == key }}" href="{{ url_for('home', view=key) }}" {% if view == key %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}{% if key == 'today' and urgent %}<b>{{ urgent|length }}</b>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  <div class="sidebar-courses"><p class="eyebrow">MY COURSES <a href="{{ url_for('home') }}#course-form" aria-label="Add course">+</a></p>
+    {% for course in courses %}<a class="course-link" href="{{ url_for('course_detail', course_id=course.id) }}#course-detail"><i class="color-dot" style="background: {{ course.color }}"></i><span>{{ course.code }}</span><small>{{ course.pending }}</small></a>{% else %}<p class="subtle small">Your semester starts with one course.</p>{% endfor %}
+  </div>
+  <div class="sidebar-note"><span>One thing at a time.</span><p>A little progress today makes tomorrow lighter.</p><div class="tiny-line"></div></div>
+  <div class="profile"><span class="avatar">YOU</span><div><strong>My study space</strong><small>Make room for what matters</small></div></div>
+</aside>

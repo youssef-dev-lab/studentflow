@@ -1,0 +1,6 @@
+<section class="stats" aria-label="Your semester at a glance">
+      <div class="stat"><span class="stat-icon purple">◷</span><div><p>Needs attention</p><strong>{{ urgent|length }}</strong><small>{{ active|selectattr('days', 'lt', 0)|list|length }} overdue · {{ active|selectattr('days', 'equalto', 0)|list|length }} due today</small></div></div>
+      <div class="stat"><span class="stat-icon blue">▦</span><div><p>Next 7 days</p><strong>{{ upcoming|length }}</strong><small>Upcoming deadlines</small></div></div>
+      <div class="stat"><span class="stat-icon green">✓</span><div><p>Completed</p><strong>{{ completed|length }}</strong><small>{{ (progress|string ~ '% of your study plan') if progress is not none else 'No study items yet' }}</small></div></div>
+      <div class="stat"><span class="stat-icon peach">▤</span><div><p>My courses</p><strong class="count">{{ courses|length }}</strong><small>Your semester, organized</small></div></div>
+    </section>

@@ -1,0 +1,27 @@
+{% if editing %}
+  {% set item = all_tasks|selectattr('id', 'equalto', editing.id)|first %}
+  <div class="planning-controls">
+    {% if item.parent_id %}
+      <p class="small subtle">This session belongs to a generated plan. Its course, type, date, and duration are fixed so the workload stays consistent.</p>
+      <a class="edit-link" href="{{ url_for('edit_task', task_id=item.parent_id) }}#capture">Open the original item to change its plan →</a>
+    {% elif item.has_plan %}
+      <h3>Your preparation plan</h3>
+      <p class="small subtle">{{ item.studied_minutes }} of {{ item.minutes }} minutes complete. Finish the original item separately when you submit the work or finish the exam. Completing it also completes any remaining sessions.</p>
+      <ul class="session-list">{% for session in all_tasks|selectattr('parent_id', 'equalto', item.id)|sort(attribute='due_date') %}<li><a href="{{ url_for('edit_task', task_id=session.id) }}#capture">{{ session.due_date }} · {{ session.minutes }} min {{ '✓' if session.completed }}</a></li>{% endfor %}</ul>
+      <p class="small subtle">To change the deadline, course, type, or workload, clear this plan first.</p>
+      <a class="delete-link" href="{{ url_for('clear_plan', task_id=item.id) }}#confirmation">Clear generated plan</a>
+    {% elif item.kind in ['exam', 'assignment'] and not item.completed %}
+      <h3>Break it into smaller steps</h3>
+      <p class="small subtle">Split {{ item.minutes }} minutes into sessions of up to 45 minutes, balanced around existing work and scheduled by the deadline.</p>
+      {% if item.days < 0 %}<p class="small error">Update this overdue deadline before generating a plan.</p>{% else %}
+      <form action="{{ url_for('plan_task', task_id=item.id) }}" method="post" data-enhance><button class="button secondary full">Generate study sessions</button></form>
+      {% endif %}
+    {% endif %}
+  </div>
+{% elif plannable %}
+  <div class="planning-controls">
+    <h3>Turn deadlines into a plan</h3>
+    <p class="small subtle">Break {{ plannable|length }} unplanned assignments and exams into manageable study sessions. Earlier deadlines are planned first.</p>
+    <form action="{{ url_for('plan_all') }}" method="post" data-enhance><button class="button secondary full">Generate study sessions</button></form>
+  </div>
+{% endif %}

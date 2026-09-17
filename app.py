@@ -1,171 +1,201 @@
-"""StudentFlow: courses, deadlines, and a practical plan for your day."""
-import sqlite3
-from datetime import date, timedelta
+"""StudentFlow's Flask routes. Planning and persistence live in studentflow/."""
+from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, abort, redirect, render_template, request, url_for
 
+from studentflow.dashboard import dashboard_context
+from studentflow.database import Database
+from studentflow.dates import utc_now
+from studentflow.models import DEFAULT_COLOR
+from studentflow.plans import create_all_plans, create_plan
+from studentflow.validation import course_values, task_values
 
-PRIORITIES = {'high': 0, 'normal': 1, 'low': 2}
-VIEWS = {'all': 'Your study plan', 'today': 'Due today & overdue',
-         'week': 'The next seven days', 'completed': 'Completed work'}
+NOTICES = {'course-saved': 'Course saved.', 'item-saved': 'Study item saved.',
+           'deleted': 'Removed from your plan.', 'completed': 'Progress updated.',
+           'planned': 'Study sessions saved. Existing plans were kept.',
+           'cleared': 'Generated sessions removed. You can now adjust the original item.'}
 
 
 def create_app(database_path=None):
     app = Flask(__name__)
     Path(app.instance_path).mkdir(exist_ok=True)
     app.config['DATABASE'] = database_path or Path(app.instance_path) / 'studentflow.db'
-
-    def query(sql, parameters=(), fetch=False):
-        connection = sqlite3.connect(app.config['DATABASE'])
-        connection.row_factory = sqlite3.Row
-        connection.execute('PRAGMA foreign_keys = ON')
-        try:
-            with connection:
-                result = connection.execute(sql, parameters)
-                return [dict(row) for row in result.fetchall()] if fetch else None
-        finally:
-            connection.close()
-
-    # Existing course data stays intact when the planner is added.
-    query('CREATE TABLE IF NOT EXISTS courses '
-          '(id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL)')
-    query('CREATE TABLE IF NOT EXISTS tasks ('
-          'id TEXT PRIMARY KEY, title TEXT NOT NULL, '
-          'course_id TEXT NOT NULL REFERENCES courses(id), '
-          'kind TEXT NOT NULL, due_date TEXT NOT NULL, priority TEXT NOT NULL, '
-          'minutes INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT "", '
-          'completed INTEGER NOT NULL DEFAULT 0)')
+    database = Database(app.config['DATABASE'])
+    database.initialize()
 
     def today():
         return app.config.get('TODAY', date.today())
 
-    def dashboard(error=None, status=200, editing=None):
-        current_day = today()
-        courses = query('SELECT * FROM courses ORDER BY rowid', fetch=True)
-        tasks = query('SELECT tasks.*, courses.name AS course_name, courses.code AS course_code '
-                      'FROM tasks JOIN courses ON courses.id = tasks.course_id', fetch=True)
-        for task in tasks:
-            due = date.fromisoformat(task['due_date'])
-            days = (due - current_day).days
-            task['days'] = days
-            task['due_label'] = ('Overdue · ' + due.strftime('%b %d') if days < 0 else
-                                 'Today' if days == 0 else 'Tomorrow' if days == 1 else due.strftime('%b %d'))
-        tasks.sort(key=lambda task: (task['due_date'], PRIORITIES[task['priority']], task['title'].lower()))
-        active = [task for task in tasks if not task['completed']]
-        completed = [task for task in tasks if task['completed']]
-        urgent = [task for task in active if task['days'] <= 0]
-        upcoming = [task for task in active if 0 <= task['days'] < 7]
-        view = request.args.get('view', 'all')
-        if view not in VIEWS:
-            view = 'all'
-        course_filter = request.args.get('course', '')
-        visible = {'all': active, 'today': urgent, 'week': upcoming, 'completed': completed}[view]
-        if course_filter:
-            visible = [task for task in visible if task['course_id'] == course_filter]
-        week = []
-        for offset in range(7):
-            day = current_day + timedelta(days=offset)
-            due_tasks = [task for task in active if task['due_date'] == day.isoformat()]
-            week.append({'label': day.strftime('%a'), 'number': day.day, 'tasks': due_tasks})
-        for course in courses:
-            course['pending'] = sum(task['course_id'] == course['id'] for task in active)
-            course['total'] = sum(task['course_id'] == course['id'] for task in tasks)
+    def find(table, record_id):
+        rows = database.query(f'SELECT * FROM {table} WHERE id = ?', (record_id,), fetch=True)
+        if not rows:
+            abort(404)
+        return rows[0]
+
+    def dashboard(error=None, status=200, editing=None, course_edit=None, course_id=None, confirmation=None, focused_id=None):
+        try:
+            context = dashboard_context(database, today(), request.args, course_id)
+        except ValueError as invalid_filter:
+            context = dashboard_context(database, today(), {}, course_id)
+            error, status = str(invalid_filter), 400
         return render_template(
-            'index.html', courses=courses, tasks=visible, active=active, completed=completed,
-            urgent=urgent, upcoming=upcoming, week=week, view=view, course_filter=course_filter,
-            heading=VIEWS[view], today=current_day, next_task=active[0] if active else None,
-            progress=round(len(completed) / len(tasks) * 100) if tasks else 0,
-            remaining_minutes=sum(task['minutes'] for task in urgent),
-            error=error, editing=editing, form=request.form,
+            'index.html', **context, error=error, editing=editing, course_edit=course_edit,
+            confirmation=confirmation, form=request.form, default_color=DEFAULT_COLOR,
+            focused_item=next((item for item in context['all_tasks'] if item['id'] == focused_id), None),
+            notice=NOTICES.get(request.args.get('notice')),
         ), status
+
+    def saved(notice, anchor='plan', **filters):
+        return redirect(url_for('home', notice=notice, _anchor=anchor, **filters), code=303)
 
     @app.get('/')
     def home():
         return dashboard()
 
+    @app.get('/courses/<course_id>')
+    def course_detail(course_id):
+        find('courses', course_id)
+        return dashboard(course_id=course_id)
+
     @app.post('/courses')
     def add_course():
-        name = request.form.get('name', '').strip()
-        code = request.form.get('code', '').strip()
-        if not name or not code:
-            return dashboard('Please enter both a course name and a course code.', 400)
-        if len(name) > 120 or len(code) > 24:
-            return dashboard('Use up to 120 characters for a course name and 24 for its code.', 400)
-        query('INSERT INTO courses (id, name, code) VALUES (?, ?, ?)', (str(uuid4()), name, code))
-        return redirect(url_for('home', _anchor='courses'), code=303)
+        try:
+            values = course_values(request.form)
+        except ValueError as error:
+            return dashboard(str(error), 400)
+        database.query('INSERT INTO courses (id, name, code, color, instructor, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                       (str(uuid4()), *values, utc_now()))
+        return saved('course-saved', 'courses')
 
-    @app.post('/courses/<course_id>/delete')
+    @app.route('/courses/<course_id>/edit', methods=['GET', 'POST'])
+    def edit_course(course_id):
+        course = find('courses', course_id)
+        if request.method == 'GET':
+            return dashboard(course_edit=course, course_id=course_id)
+        try:
+            values = course_values(request.form)
+        except ValueError as error:
+            return dashboard(str(error), 400, course_edit=course, course_id=course_id)
+        database.query('UPDATE courses SET name=?, code=?, color=?, instructor=? WHERE id=?', (*values, course_id))
+        return saved('course-saved', 'courses', course=course_id)
+
+    @app.route('/courses/<course_id>/delete', methods=['GET', 'POST'])
     def delete_course(course_id):
-        if query('SELECT id FROM tasks WHERE course_id = ?', (course_id,), fetch=True):
-            return dashboard('This course has study items. Delete those items before removing the course.', 400)
-        query('DELETE FROM courses WHERE id = ?', (course_id,))
-        return redirect(url_for('home', _anchor='courses'), code=303)
-
-    def task_values():
-        title = request.form.get('title', '').strip()
-        course_id = request.form.get('course_id', '')
-        kind = request.form.get('kind', '')
-        due_date = request.form.get('due_date', '')
-        priority = request.form.get('priority', 'normal')
-        notes = request.form.get('notes', '').strip()
-        if not title or len(title) > 180:
-            raise ValueError('Give your study item a title of 1–180 characters.')
-        if not query('SELECT id FROM courses WHERE id = ?', (course_id,), fetch=True):
-            raise ValueError('Choose an existing course first.')
-        if kind not in ('assignment', 'exam', 'study') or priority not in PRIORITIES:
-            raise ValueError('Choose a valid item type and priority.')
-        try:
-            due_date = date.fromisoformat(due_date).isoformat()
-        except ValueError:
-            raise ValueError('Choose a valid deadline.') from None
-        try:
-            minutes = int(request.form.get('minutes', '30'))
-        except ValueError:
-            raise ValueError('Enter an estimated time in whole minutes.') from None
-        if not 5 <= minutes <= 1440:
-            raise ValueError('Estimated time must be between 5 and 1,440 minutes.')
-        if len(notes) > 4000:
-            raise ValueError('Keep notes under 4,000 characters.')
-        return title, course_id, kind, due_date, priority, minutes, notes
+        course = find('courses', course_id)
+        items = database.query('SELECT id FROM tasks WHERE course_id=?', (course_id,), fetch=True)
+        if request.method == 'GET':
+            return dashboard(confirmation=dict(title=f"Delete {course['name']}?",
+                message=f"This removes the course and all {len(items)} associated study items, including generated sessions and completed work.",
+                action=url_for('delete_course', course_id=course_id), button='Delete course and its items'), course_id=course_id)
+        if items and request.form.get('confirm') != 'yes':
+            return dashboard('Confirm course deletion first. Its study items have been kept.', 400)
+        with database.connection() as connection:
+            connection.execute('DELETE FROM tasks WHERE course_id=?', (course_id,))
+            connection.execute('DELETE FROM courses WHERE id=?', (course_id,))
+        return saved('deleted', 'courses')
 
     @app.post('/tasks')
     def add_task():
         try:
-            values = task_values()
+            values = task_values(request.form, database)
         except ValueError as error:
             return dashboard(str(error), 400)
-        query('INSERT INTO tasks (id, title, course_id, kind, due_date, priority, minutes, notes) '
-              'VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (str(uuid4()), *values))
-        return redirect(url_for('home', _anchor='plan'), code=303)
+        database.query('INSERT INTO tasks (id, title, course_id, kind, due_date, priority, minutes, notes, created_at) '
+                       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (str(uuid4()), *values, utc_now()))
+        return saved('item-saved')
 
     @app.route('/tasks/<task_id>/edit', methods=['GET', 'POST'])
     def edit_task(task_id):
-        matches = query('SELECT * FROM tasks WHERE id = ?', (task_id,), fetch=True)
-        if not matches:
-            abort(404)
+        item = find('tasks', task_id)
         if request.method == 'GET':
-            return dashboard(editing=matches[0])
+            return dashboard(editing=item)
         try:
-            values = task_values()
+            values = task_values(request.form, database)
+            # Plan durations must continue to add up to the original workload.
+            has_plan = database.query('SELECT id FROM tasks WHERE parent_id=?', (task_id,), fetch=True)
+            if has_plan or item['parent_id']:
+                proposed = (values[1], values[2], values[3], values[5])
+                existing = (item['course_id'], item['kind'], item['due_date'], item['minutes'])
+                if proposed != existing:
+                    raise ValueError('Clear the generated plan on the original item before changing its course, type, deadline, or estimate.')
         except ValueError as error:
-            return dashboard(str(error), 400, editing=matches[0])
-        query('UPDATE tasks SET title=?, course_id=?, kind=?, due_date=?, priority=?, minutes=?, notes=? '
-              'WHERE id=?', (*values, task_id))
-        return redirect(url_for('home', _anchor='plan'), code=303)
+            return dashboard(str(error), 400, editing=item)
+        with database.connection() as connection:
+            connection.execute('UPDATE tasks SET title=?, course_id=?, kind=?, due_date=?, priority=?, minutes=?, notes=? WHERE id=?',
+                               (*values, task_id))
+            if not item['parent_id']:
+                connection.execute('UPDATE tasks SET priority=? WHERE parent_id=?', (values[4], task_id))
+        return saved('item-saved')
+
+    @app.get('/tasks/<task_id>/focus')
+    def focus_task(task_id):
+        find('tasks', task_id)
+        return dashboard(focused_id=task_id)
 
     @app.post('/tasks/<task_id>/toggle')
     def toggle_task(task_id):
-        query('UPDATE tasks SET completed = 1 - completed WHERE id = ?', (task_id,))
-        view = request.form.get('view', 'all')
-        return redirect(url_for('home', view=view if view in VIEWS else 'all',
-                                course=request.form.get('course', ''), _anchor='plan'), code=303)
+        find('tasks', task_id)
+        with database.connection() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            item = connection.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            completing = not item['completed']
+            if item['parent_id'] and not completing:
+                parent = connection.execute('SELECT completed FROM tasks WHERE id=?', (item['parent_id'],)).fetchone()
+                if parent['completed']:
+                    return dashboard('Reopen the original item before reopening its study sessions.', 400)
+            connection.execute('UPDATE tasks SET completed=?, completed_at=? WHERE id=?',
+                               (int(completing), utc_now() if completing else None, task_id))
+            if completing:
+                # Finishing the original work retires its remaining preparation sessions.
+                connection.execute('UPDATE tasks SET completed=1, completed_at=? WHERE parent_id=? AND completed=0',
+                                   (utc_now(), task_id))
+        filters = {key: request.form.get(key, '') for key in ('view', 'course', 'type', 'priority', 'date')}
+        return saved('completed', **filters)
 
-    @app.post('/tasks/<task_id>/delete')
+    @app.route('/tasks/<task_id>/delete', methods=['GET', 'POST'])
     def delete_task(task_id):
-        query('DELETE FROM tasks WHERE id = ?', (task_id,))
-        return redirect(url_for('home', _anchor='plan'), code=303)
+        item = find('tasks', task_id)
+        children = database.query('SELECT id FROM tasks WHERE parent_id=?', (task_id,), fetch=True)
+        if request.method == 'GET':
+            return dashboard(confirmation=dict(title=f"Delete {item['title']}?",
+                message=f"This permanently removes the item, its notes, and {len(children)} generated study sessions.",
+                action=url_for('delete_task', task_id=task_id), button='Delete item'))
+        if item['parent_id']:
+            return dashboard('Clear the plan on the original item to remove generated sessions safely.', 400)
+        if children and request.form.get('confirm') != 'yes':
+            return dashboard('Confirm deletion of the item and its generated sessions first.', 400)
+        database.query('DELETE FROM tasks WHERE id=?', (task_id,))
+        return saved('deleted')
+
+    @app.post('/tasks/<task_id>/plan')
+    def plan_task(task_id):
+        item = find('tasks', task_id)
+        try:
+            create_plan(database, task_id, today())
+        except ValueError as error:
+            return dashboard(str(error), 400, editing=item)
+        return saved('planned')
+
+    @app.post('/plans/generate')
+    def plan_all():
+        create_all_plans(database, today())
+        return saved('planned')
+
+    @app.route('/tasks/<task_id>/plan/clear', methods=['GET', 'POST'])
+    def clear_plan(task_id):
+        item = find('tasks', task_id)
+        if item['parent_id']:
+            abort(400)
+        if request.method == 'GET':
+            return dashboard(confirmation=dict(title='Clear generated study sessions?',
+                message='This removes all generated sessions for this item, including their completion history. The original item stays saved.',
+                action=url_for('clear_plan', task_id=task_id), button='Clear generated plan'))
+        if request.form.get('confirm') != 'yes':
+            return dashboard('Confirm before clearing the generated plan.', 400)
+        database.query('DELETE FROM tasks WHERE parent_id=?', (task_id,))
+        return saved('cleared')
 
     return app
 

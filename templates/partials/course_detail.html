@@ -1,0 +1,12 @@
+{% if selected_course %}
+<section id="course-detail" class="panel course-detail" aria-labelledby="course-detail-title" style="--course-color: {{ selected_course.color }}">
+  <div class="section-heading">
+    <div><p class="eyebrow">{{ selected_course.code }}</p><h2 id="course-detail-title">{{ selected_course.name }}</h2></div>
+    <a class="button secondary" href="{{ url_for('edit_course', course_id=selected_course.id) }}#course-form">Edit course</a>
+  </div>
+  <p class="small subtle">{{ selected_course.instructor or 'No instructor added yet' }}</p>
+  <p class="small">{{ selected_course.pending }} active items · {{ selected_course.remaining_minutes }} min remaining · {{ selected_course.total - selected_course.pending }} completed</p>
+  <p class="small subtle">Added {{ selected_course.created_at[:10] }}. The list and calendar below are filtered to this course.</p>
+  <a class="edit-link" href="{{ url_for('home') }}#plan">Show all courses</a>
+</section>
+{% endif %}

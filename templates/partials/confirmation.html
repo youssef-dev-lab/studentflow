@@ -1,0 +1,11 @@
+{% if confirmation %}
+<section id="confirmation" class="panel confirmation" aria-labelledby="confirmation-title">
+  <h2 id="confirmation-title">{{ confirmation.title }}</h2>
+  <p>{{ confirmation.message }}</p>
+  <form method="post" action="{{ confirmation.action }}" data-enhance>
+    <input type="hidden" name="confirm" value="yes">
+    <button class="button danger" type="submit">{{ confirmation.button }}</button>
+    <a class="button secondary" href="{{ url_for('home') }}">Cancel</a>
+  </form>
+</section>
+{% endif %}
